@@ -1,0 +1,237 @@
+// ==========================================
+// PRISMA CONFIGURATION
+// ==========================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// CUSTOM ENUMS 
+// ==========================================
+enum Role {
+  USER // Can only read, comment, like, share, and bookmark
+  WRITER // Can write and edit drafts, but cannot publish directly
+  AUTHOR // Can write, edit, and publish their own posts
+  ADMIN // Full system control (manage users, categories, all posts)
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// ==========================================
+// CORE AUTH & USER TABLES
+// ==========================================
+
+model User {
+  id            String  @id @default(cuid())
+  name          String
+  email         String  @unique
+  emailVerified Boolean @default(false)
+  image         String? @db.Text
+  phoneNumber   String? @unique
+  role          Role    @default(USER)
+  isBanned      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sessions  Session[]
+  accounts  Account[]
+  posts     Post[] // Posts written by the user (if Writer/Author/Admin)
+  comments  Comment[] // Comments left by the user
+  likes     Like[] // Posts the user has liked
+  bookmarks Bookmark[] // Posts the user has saved to read later
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  deviceId  String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Account {
+  id         String @id @default(cuid())
+  accountId  String
+  providerId String
+  userId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessToken  String?   @db.Text
+  refreshToken String?   @db.Text
+  idToken      String?   @db.Text
+  expiresAt    DateTime?
+  password     String?
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+// ==========================================
+// OTP & EMAIL VERIFICATION (🔥 ADDED THIS)
+// ==========================================
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String   // Stores the user's email
+  value      String   // Stores the hashed OTP
+  expiresAt  DateTime
+  
+  createdAt  DateTime @default(now())
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// ==========================================
+// BLOG ENGINE & TAXONOMY
+// ==========================================
+
+model Category {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String? @db.Text
+
+  posts Post[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  posts Post[] // Many-to-Many relation with Post
+
+  @@map("tags")
+}
+
+// ==========================================
+// CONTENT & ENGAGEMENT TABLES
+// ==========================================
+
+model Post {
+  id         String  @id @default(cuid())
+  title      String
+  slug       String  @unique
+  content    String  @db.Text
+  excerpt    String? @db.Text
+  coverImage String? @db.Text
+
+  status      PostStatus @default(DRAFT)
+  publishedAt DateTime?
+  readTime    Int?
+
+  // Cached Engagement Counters (Sync these via background jobs/Redis for massive scale)
+  viewCount  Int @default(0)
+  likeCount  Int @default(0)
+  shareCount Int @default(0)
+
+  // SEO Fields
+  metaTitle       String?
+  metaDescription String? @db.Text
+  canonicalUrl    String? @db.Text
+
+  // Relations
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  tags      Tag[]
+  comments  Comment[]
+  likes     Like[]
+  bookmarks Bookmark[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Optimizations
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([slug])
+  @@index([status, publishedAt, createdAt])
+  @@index([viewCount, createdAt])
+  @@index([likeCount, createdAt])
+  @@map("posts")
+}
+
+model Comment {
+  id         String  @id @default(cuid())
+  content    String  @db.Text
+  isApproved Boolean @default(true) // Set to false if you want strict moderation
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([isApproved])
+  @@map("comments")
+}
+
+// ==========================================
+// USER INTERACTION TABLES
+// ==========================================
+
+model Like {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  // CRITICAL: A user can only like a specific post once.
+  @@unique([userId, postId])
+  @@map("likes")
+}
+
+model Bookmark {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  // CRITICAL: A user can only bookmark a specific post once.
+  @@unique([userId, postId])
+  @@map("bookmarks")
+}
