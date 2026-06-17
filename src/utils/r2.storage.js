@@ -79,9 +79,9 @@ export const uploadBase64ToR2 = async (base64String) => {
   try {
     if (!base64String || !base64String.startsWith('data:image/')) return null;
 
-    const matches = base64String.match(/^data:image\/(jpeg|png|webp|gif);base64,(.+)$/);
+    const matches = base64String.match(/^data:image\/(jpeg|jpg|png|webp|gif|avif|bmp|tiff|svg\+xml|svg);base64,(.+)$/);
     if (!matches || matches.length !== 3) {
-      throw new AppError("Invalid or unsupported base64 image format. Only JPEG, PNG, WEBP, and GIF are allowed.", 400);
+      throw new AppError("Invalid or unsupported base64 image format. Supported: JPEG, PNG, WEBP, GIF, AVIF, BMP, TIFF, SVG.", 400);
     }
 
     const fileExtension = matches[1];

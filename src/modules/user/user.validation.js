@@ -16,10 +16,10 @@ const dualModeImageValidator = z.string()
   .max(7500000, 'Image payload is too large. Maximum size is 5MB.')
   .refine((val) => {
     if (val.startsWith('http://') || val.startsWith('https://')) return true;
-    if (/^data:image\/(jpeg|png|webp|gif);base64,/.test(val)) return true;
+    if (/^data:image\/(jpeg|jpg|png|webp|gif|avif|bmp|tiff|svg(\+xml)?);base64,/.test(val)) return true;
     return false;
   }, {
-    message: "Image must be a valid public URL or a valid Base64 encoded image string (jpeg, png, webp, gif).",
+    message: "Image must be a valid public URL or a valid Base64 encoded image string.",
   });
 
 // ==========================================
