@@ -25,9 +25,8 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 const allowedOrigins = [
-  env.NODE_ENV === 'production' ? 'https://gaprio.com' : 'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:5500' // <-- ADD THIS FOR LIVE SERVER!
+  'https://blogs.eklak.site', // <--- YOUR NEW PRODUCTION FRONTEND
+  'http://localhost:3000',
 ].filter(Boolean);
 
 app.use(cors({
